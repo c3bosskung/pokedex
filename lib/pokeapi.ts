@@ -434,8 +434,6 @@ export async function getFullPokemon(id: number): Promise<PokemonFull> {
     P.getPokemonSpeciesByName(id),
     getDamageRelations(),
   ]);
-  const chainId = urlToId(species.evolution_chain.url);
-  const chain = await P.getEvolutionChainById(chainId);
 
   const types = [...pkmn.types]
     .sort((a, b) => a.slot - b.slot)
@@ -462,16 +460,6 @@ export async function getFullPokemon(id: number): Promise<PokemonFull> {
   const versionGroup = pickBestVersionGroup(defaultRaw);
   const movepool = buildMovepool(defaultRaw, versionGroup);
 
-  const abilitySlugs = Array.from(
-    new Set(forms.flatMap((f) => f.abilities.map((a) => a.slug))),
-  );
-  const moveSlugs = Array.from(new Set(movepool.map((m) => m.slug)));
-
-  const [abilityDetail, moveDetail] = await Promise.all([
-    fetchAbilityDetails(abilitySlugs),
-    fetchMoveDetails(moveSlugs),
-  ]);
-
   const defaultAbilities = defaultBundle?.form.abilities ?? buildFormAbilities(pkmn);
   const formTags = deriveFormTags(species.name, forms.map((f) => f.slug));
 
@@ -485,10 +473,10 @@ export async function getFullPokemon(id: number): Promise<PokemonFull> {
     abilities: defaultAbilities,
     stats,
     movepool,
-    moveDetail,
-    abilityDetail,
-    evolution: buildEvoTree(chain.chain as EvoLink),
-    babyTriggerItem: chain.baby_trigger_item?.name ?? null,
+    moveDetail: {},
+    abilityDetail: {},
+    evolution: { id: pkmn.id, conditions: [], children: [] },
+    babyTriggerItem: null,
     flavor: cleanText(pickFlavor(species)),
     art: ART(pkmn.id),
     sprite: SPRITE(pkmn.id),
@@ -499,6 +487,94 @@ export async function getFullPokemon(id: number): Promise<PokemonFull> {
     damageRelations,
     versionGroup,
   };
+}
+
+export type PokemonEvolutionBundle = {
+  evolution: EvolutionNode;
+  babyTriggerItem: string | null;
+  evoLites: Record<number, PokemonLite>;
+};
+
+export async function getPokemonEvolution(
+  id: number,
+): Promise<PokemonEvolutionBundle> {
+  "use cache";
+  cacheLife("max");
+  cacheTag(`pokemon:${id}:evolution`);
+
+  const species = await P.getPokemonSpeciesByName(id);
+  const chainId = urlToId(species.evolution_chain.url);
+  const [chain, all] = await Promise.all([
+    P.getEvolutionChainById(chainId),
+    getAllPokemonLite(),
+  ]);
+
+  const evolution = buildEvoTree(chain.chain as EvoLink);
+
+  const evoIds: number[] = [];
+  (function walk(node: EvolutionNode) {
+    evoIds.push(node.id);
+    for (const c of node.children) walk(c);
+  })(evolution);
+
+  const evoLites: Record<number, PokemonLite> = {};
+  for (const eid of evoIds) {
+    const p = all.find((x) => x.id === eid);
+    if (p) evoLites[p.id] = p;
+  }
+
+  return {
+    evolution,
+    babyTriggerItem: chain.baby_trigger_item?.name ?? null,
+    evoLites,
+  };
+}
+
+export async function getPokemonAbilityDetail(
+  id: number,
+): Promise<Record<string, AbilityDetail>> {
+  "use cache";
+  cacheLife("max");
+  cacheTag(`pokemon:${id}:abilities`);
+
+  const species = await P.getPokemonSpeciesByName(id);
+  const formsRaw = await Promise.all(
+    species.varieties.map((v) => buildForm(v, species.name)),
+  );
+  const slugs = Array.from(
+    new Set(
+      formsRaw
+        .filter(
+          (f): f is { form: PokemonForm; raw: Pokedex.Pokemon } => f !== null,
+        )
+        .flatMap((b) => b.form.abilities.map((a) => a.slug)),
+    ),
+  );
+  return fetchAbilityDetails(slugs);
+}
+
+export async function getPokemonMoveDetail(
+  id: number,
+): Promise<Record<string, MoveDetail>> {
+  "use cache";
+  cacheLife("max");
+  cacheTag(`pokemon:${id}:moves`);
+
+  const [pkmn, species] = await Promise.all([
+    P.getPokemonByName(id),
+    P.getPokemonSpeciesByName(id),
+  ]);
+
+  const defaultVariety =
+    species.varieties.find((v) => v.is_default) ?? species.varieties[0];
+  const defaultRaw = defaultVariety
+    ? await P.getPokemonByName(defaultVariety.pokemon.name)
+    : pkmn;
+
+  const versionGroup = pickBestVersionGroup(defaultRaw);
+  const movepool = buildMovepool(defaultRaw, versionGroup);
+  const slugs = Array.from(new Set(movepool.map((m) => m.slug)));
+  return fetchMoveDetails(slugs);
 }
 
 function deriveFormTags(speciesSlug: string, formSlugs: string[]): FormCategory[] {

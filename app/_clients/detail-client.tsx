@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { PokemonFull, PokemonLite } from "@/lib/types";
+import type { PokemonEvolutionBundle } from "@/lib/pokeapi";
+import type {
+  AbilityDetail,
+  MoveDetail,
+  PokemonFull,
+  PokemonLite,
+} from "@/lib/types";
 import { pokemonHref } from "../_lib/helpers";
 import { DetailHeader } from "../_components/detail-header";
 import { DetailPanels } from "../_components/detail-panels";
@@ -24,13 +30,17 @@ export function DetailClient({
   neighbors,
   idx,
   total,
-  evoLites,
+  evolutionPromise,
+  movesPromise,
+  abilityDetailPromise,
 }: {
   full: PokemonFull;
   neighbors: Neighbors;
   idx: number;
   total: number;
-  evoLites: Record<number, PokemonLite>;
+  evolutionPromise: Promise<PokemonEvolutionBundle>;
+  movesPromise: Promise<Record<string, MoveDetail>>;
+  abilityDetailPromise: Promise<Record<string, AbilityDetail>>;
 }) {
   const { t } = useTweaks();
   const router = useRouter();
@@ -80,6 +90,7 @@ export function DetailClient({
               active={active}
               accentStrength={accentStrength}
               onSelectForm={handleSelectForm}
+              abilityDetailPromise={abilityDetailPromise}
             />
             <StackCard p={next} variant="side" />
             <StackCard p={next2} variant="far" />
@@ -116,7 +127,8 @@ export function DetailClient({
             full={full}
             active={active}
             onSelectForm={handleSelectForm}
-            liteById={evoLites}
+            evolutionPromise={evolutionPromise}
+            movesPromise={movesPromise}
           />
         </div>
       </main>

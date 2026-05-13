@@ -1,14 +1,13 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { DetailClient } from "@/app/_clients/detail-client";
-import { getAllPokemonLite, getFullPokemon } from "@/lib/pokeapi";
-import type { EvolutionNode, PokemonLite } from "@/lib/types";
-
-function collectEvoIds(node: EvolutionNode, out: number[] = []): number[] {
-  out.push(node.id);
-  for (const c of node.children) collectEvoIds(c, out);
-  return out;
-}
+import {
+  getAllPokemonLite,
+  getFullPokemon,
+  getPokemonAbilityDetail,
+  getPokemonEvolution,
+  getPokemonMoveDetail,
+} from "@/lib/pokeapi";
 
 async function DetailContent({
   paramsPromise,
@@ -37,11 +36,9 @@ async function DetailContent({
     next2: wrap(idx + 2),
   };
 
-  const evoLites: Record<number, PokemonLite> = {};
-  for (const eid of collectEvoIds(full.evolution)) {
-    const p = all.find((x) => x.id === eid);
-    if (p) evoLites[p.id] = p;
-  }
+  const evolutionPromise = getPokemonEvolution(n);
+  const movesPromise = getPokemonMoveDetail(n);
+  const abilityDetailPromise = getPokemonAbilityDetail(n);
 
   return (
     <DetailClient
@@ -49,7 +46,9 @@ async function DetailContent({
       neighbors={neighbors}
       idx={idx}
       total={total}
-      evoLites={evoLites}
+      evolutionPromise={evolutionPromise}
+      movesPromise={movesPromise}
+      abilityDetailPromise={abilityDetailPromise}
     />
   );
 }
